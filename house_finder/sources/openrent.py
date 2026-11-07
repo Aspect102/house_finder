@@ -52,6 +52,12 @@ _BLOCK_MARKERS = (
     "attention required",
     "access denied",
     "are you a human",
+    "confirm you are human",
+    "verify you are human",
+    "awswaf",
+    "aws waf",
+    "challenge-platform",
+    "checking your browser",
 )
 
 

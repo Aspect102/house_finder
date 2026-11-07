@@ -379,6 +379,7 @@ def test_openrent_detects_challenge_page():
 
     assert _looks_blocked("<title>Human Verification</title> ... captcha ...")
     assert _looks_blocked("Just a moment...")
+    assert _looks_blocked("window.awsWafCookieDomainList = ['x'];")
     assert not _looks_blocked('<a class="pli search-property-card" href="/x">')
 
 
