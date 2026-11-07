@@ -112,11 +112,17 @@ queried live per search.
    but no latitude/longitude (via postcodes.io), so `transit geocode` is only
    needed if you add listings another way.
 
-4. In the UI, pick one or more routes under **Bus routes**, then set the
-   **Max walk** either in metres or as a walking time (the two are linked at
-   ≈4.8 km/h / 80 m per minute) and cards show the nearest stop and distance.
-   Editing either field re-runs the search. There is also a **↻ Refresh bus
-   data** button in the sidebar.
+4. In the UI, choose a **Mode**:
+   - **Only listings near a stop on selected routes** (filter) — pick one or
+     more routes and only listings within the **Max walk** of a stop on them
+     are shown; each card shows its nearest such stop.
+   - **All listings, label nearest routes** (annotate) — every listing is
+     shown and each card lists the closest stop on *every* route within range,
+     e.g. `U1 at Laura Place · 634 m` and `U2 at John's Court · 300 m`.
+
+   **Max walk** can be given in metres or as a walking time (the two are
+   linked at ≈4.8 km/h / 80 m per minute); editing either re-runs the search.
+   There is also a **↻ Refresh bus data** button in the sidebar.
 
 The scheduler refreshes route/stop data every `HF_BODS_REFRESH_HOURS` (default
 weekly) and once at startup if no data is cached. Stops are restricted to the

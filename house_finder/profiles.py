@@ -77,6 +77,8 @@ def profile_apply_qs(profile: SearchProfile) -> str:
     distance = params.get("max_stop_distance_m")
     if distance:
         view["max_stop_distance_m"] = str(distance)
+    if params.get("route_mode") == "annotate":
+        view["route_mode"] = "annotate"
     sources = params.get("sources") or []
     if isinstance(sources, (list, tuple)) and len(sources) == 1:
         view["source"] = str(sources[0])

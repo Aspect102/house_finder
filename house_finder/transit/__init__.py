@@ -17,6 +17,7 @@ from __future__ import annotations
 from .geo import haversine_m
 from .ingest import (
     TransitSyncResult,
+    annotate_listings_by_routes,
     available_routes,
     filter_listings_by_routes,
     route_points,
@@ -25,6 +26,7 @@ from .ingest import (
 
 __all__ = [
     "TransitSyncResult",
+    "annotate_listings_by_routes",
     "available_routes",
     "filter_listings_by_routes",
     "haversine_m",

@@ -425,9 +425,23 @@ def _resolve_routes(session: Session, tokens: list[str]) -> tuple[list[TransitRo
     return list(matched.values()), unresolved
 
 
-def route_points(session: Session, tokens: list[str]) -> tuple[list[StopPoint], list[str]]:
-    """Return the stop points for the selected routes plus any unknown tokens."""
-    routes, unresolved = _resolve_routes(session, tokens)
+def route_points(
+    session: Session,
+    tokens: list[str] | None = None,
+    *,
+    all_routes: bool = False,
+) -> tuple[list[StopPoint], list[str]]:
+    """Return the stop points for the selected routes plus any unknown tokens.
+
+    With ``all_routes=True`` (or no tokens) every stored route is included.
+    """
+    if all_routes or not tokens:
+        routes = (
+            session.scalars(select(TransitRoute)).all() if all_routes else []
+        )
+        unresolved: list[str] = []
+    else:
+        routes, unresolved = _resolve_routes(session, tokens)
     if not routes:
         return [], unresolved
     by_id = {r.id: r for r in routes}
@@ -489,7 +503,7 @@ def filter_listings_by_routes(
     listings: list,
     tokens: list[str],
     max_distance_m: int,
-) -> tuple[list, dict[int, dict], str]:
+) -> tuple[list, dict[int, list[dict]], str]:
     """Filter ``listings`` to those near a selected route.
 
     Returns ``(filtered, info_by_listing_id, warning)``. When no route data is
@@ -509,7 +523,7 @@ def filter_listings_by_routes(
 
     index = _NearestIndex(points)
     filtered: list = []
-    info: dict[int, dict] = {}
+    info: dict[int, list[dict]] = {}
     for listing in listings:
         if listing.latitude is None or listing.longitude is None:
             continue
@@ -519,13 +533,73 @@ def filter_listings_by_routes(
         if max_distance_m and distance > max_distance_m:
             continue
         filtered.append(listing)
-        info[listing.id] = {
-            "route_key": point.route_key,
-            "route": point.route_line,
-            "stop": point.stop_name,
-            "distance_m": int(round(distance)),
-        }
+        info[listing.id] = [
+            {
+                "route_key": point.route_key,
+                "route": point.route_line,
+                "stop": point.stop_name,
+                "distance_m": int(round(distance)),
+            }
+        ]
     warning = ""
     if unresolved:
         warning = "Unknown route(s): " + ", ".join(unresolved)
     return filtered, info, warning
+
+
+def _route_indexes(points: list[StopPoint]) -> dict[tuple[str, str], "_NearestIndex"]:
+    grouped: dict[tuple[str, str], list[StopPoint]] = {}
+    for point in points:
+        grouped.setdefault((point.route_key, point.route_line), []).append(point)
+    return {key: _NearestIndex(group) for key, group in grouped.items()}
+
+
+def annotate_listings_by_routes(
+    session: Session,
+    listings: list,
+    max_distance_m: int,
+    tokens: list[str] | None = None,
+    *,
+    all_routes: bool = True,
+) -> tuple[list, dict[int, list[dict]], str]:
+    """Label each listing with the nearest stop per route within ``max_distance_m``.
+
+    Unlike :func:`filter_listings_by_routes` this does **not** drop listings; it
+    returns every listing and a list of ``{route, stop, distance_m}`` matches
+    (nearest first) for those close enough to a stop.
+    """
+    points, unresolved = route_points(session, tokens, all_routes=all_routes)
+    if not points:
+        warning = "No stop data available yet — run a transit sync."
+        if unresolved:
+            warning += f" Unknown: {', '.join(unresolved)}."
+        return list(listings), {}, warning
+
+    indexes = _route_indexes(points)
+    info: dict[int, list[dict]] = {}
+    for listing in listings:
+        if listing.latitude is None or listing.longitude is None:
+            continue
+        matches: list[dict] = []
+        for (route_key, route_line), index in indexes.items():
+            point, distance = index.nearest(listing.latitude, listing.longitude)
+            if point is None:
+                continue
+            if max_distance_m and distance > max_distance_m:
+                continue
+            matches.append(
+                {
+                    "route_key": route_key,
+                    "route": route_line,
+                    "stop": point.stop_name,
+                    "distance_m": int(round(distance)),
+                }
+            )
+        if matches:
+            matches.sort(key=lambda m: m["distance_m"])
+            info[listing.id] = matches
+
+    warning = ""
+    if unresolved:
+        warning = "Unknown route(s): " + ", ".join(unresolved)
+    return list(listings), info, warning

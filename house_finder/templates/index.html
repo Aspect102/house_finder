@@ -101,23 +101,31 @@
         </label>
         <fieldset class="bus-routes">
           <legend>Bus routes</legend>
-          {% if transit_routes %}
-          <label>Near a stop on
-            <select name="routes" multiple size="{{ 6 if transit_routes|length > 6 else transit_routes|length }}">
-              {% for r in transit_routes %}
-              <option value="{{ r.key }}" {% if r.key in filters.routes_list or r.line_name in filters.routes_list %}selected{% endif %}>{{ r.label }} · {{ r.stop_count }} stops</option>
-              {% endfor %}
+          <label>Mode
+            <select id="route-mode" name="route_mode">
+              <option value="filter" {% if filters.route_mode != 'annotate' %}selected{% endif %}>Only listings near a stop on selected routes</option>
+              <option value="annotate" {% if filters.route_mode == 'annotate' %}selected{% endif %}>All listings, label nearest routes</option>
             </select>
           </label>
-          {% else %}
-          <p class="hint">No bus-route data yet. Use “Refresh bus data” below.</p>
-          {% endif %}
+          <div id="route-select-wrap">
+            {% if transit_routes %}
+            <label>Near a stop on
+              <select name="routes" multiple size="{{ 6 if transit_routes|length > 6 else transit_routes|length }}">
+                {% for r in transit_routes %}
+                <option value="{{ r.key }}" {% if r.key in filters.routes_list or r.line_name in filters.routes_list %}selected{% endif %}>{{ r.label }} · {{ r.stop_count }} stops</option>
+                {% endfor %}
+              </select>
+            </label>
+            {% else %}
+            <p class="hint">No bus-route data yet. Use “Refresh bus data” below.</p>
+            {% endif %}
+          </div>
           <div class="row">
-            <label>Max walk (m)
-              <input id="max-stop-distance" type="number" name="max_stop_distance_m" min="0" step="50" value="{{ filters.max_stop_distance_m }}" />
+            <label id="max-stop-distance-label">Max walk (m)
+              <input id="max-stop-distance" type="number" name="max_stop_distance_m" min="0" step="any" value="{{ filters.max_stop_distance_m }}" />
             </label>
             <label>… or time (min)
-              <input id="max-stop-time" type="number" min="0" step="1" inputmode="numeric" />
+              <input id="max-stop-time" type="number" min="0" step="any" inputmode="numeric" />
             </label>
           </div>
           <p class="hint">Distance and walking time are linked (≈4.8 km/h).</p>
@@ -189,6 +197,7 @@
           <input type="hidden" name="available_now" value="{{ filters.available_now }}" />
           <input type="hidden" name="routes" value="{{ filters.routes }}" />
           <input type="hidden" name="max_stop_distance_m" value="{{ filters.max_stop_distance_m }}" />
+          <input type="hidden" name="route_mode" value="{{ filters.route_mode }}" />
           <button class="btn tiny" type="submit">＋ Save current filters</button>
         </form>
         {% if profiles %}
@@ -260,6 +269,19 @@
         timeToDist();
         search();
       });
+
+      // Mode switch: "filter" needs the route multi-select; "annotate" ignores
+      // it (every route is labelled), so hide/disable it to avoid confusion.
+      const mode = document.getElementById("route-mode");
+      const wrap = document.getElementById("route-select-wrap");
+      const routesSelect = wrap ? wrap.querySelector('select[name="routes"]') : null;
+      const applyMode = () => {
+        const annotate = mode && mode.value === "annotate";
+        if (wrap) wrap.style.display = annotate ? "none" : "";
+        if (routesSelect) routesSelect.disabled = annotate;
+      };
+      applyMode();
+      if (mode) mode.addEventListener("change", applyMode);
     })();
   </script>
 </body>

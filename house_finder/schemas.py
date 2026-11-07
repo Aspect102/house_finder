@@ -31,6 +31,16 @@ class SearchQuery(BaseModel):
     # ``max_stop_distance_m`` is the walking cutoff (0 == no limit).
     routes: list[str] = Field(default_factory=list)
     max_stop_distance_m: int = 800
+    # "filter" = only listings near a stop on the selected routes;
+    # "annotate" = show every listing and label the nearest stop per route.
+    route_mode: str = "filter"
+
+    @field_validator("route_mode", mode="before")
+    @classmethod
+    def _normalise_route_mode(cls, value: object) -> object:
+        if isinstance(value, str) and value.strip().lower() == "annotate":
+            return "annotate"
+        return "filter"
 
     @field_validator("routes", mode="before")
     @classmethod
@@ -94,6 +104,7 @@ class SearchQuery(BaseModel):
                 self.radius_miles,
                 ",".join(self.routes),
                 self.max_stop_distance_m,
+                self.route_mode,
             )
         )
 
@@ -125,6 +136,15 @@ class RawListing(BaseModel):
     description: str = ""
     image_url: str = ""
     raw: dict = Field(default_factory=dict)
+
+
+class NearbyRoute(BaseModel):
+    """A route with a nearby stop, relative to a listing."""
+
+    route_key: str
+    route: str
+    stop: str
+    distance_m: int
 
 
 class ListingOut(BaseModel):
@@ -159,6 +179,7 @@ class ListingOut(BaseModel):
     nearest_route: str | None = None
     nearest_stop: str | None = None
     nearest_stop_m: int | None = None
+    nearby_routes: list[NearbyRoute] | None = None
 
     @field_validator("status", mode="before")
     @classmethod

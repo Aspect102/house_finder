@@ -208,9 +208,26 @@ def test_filter_by_routes_matches_line_name_and_distance():
         filtered, info, warning = filter_listings_by_routes(session, listings, ["U1"], 500)
         ids = {x.source_id for x in filtered}
         assert ids == {"NEAR"}
-        assert info[filtered[0].id]["route"] == "U1"
-        assert info[filtered[0].id]["distance_m"] < 100
+        assert info[filtered[0].id][0]["route"] == "U1"
+        assert info[filtered[0].id][0]["distance_m"] < 100
         assert warning == ""
+
+
+def test_annotate_labels_all_listings_with_nearest_routes():
+    from house_finder.transit import annotate_listings_by_routes
+
+    _seed_route()
+    with session_scope() as session:
+        listings = session.query(Listing).all()
+        # Annotate mode never drops listings.
+        annotated, info, _w = annotate_listings_by_routes(
+            session, listings, 500, all_routes=True
+        )
+        assert len(annotated) == len(listings)
+        near = next(x for x in listings if x.source_id == "NEAR")
+        assert info[near.id][0]["route"] == "U1"
+        # The far listing is beyond the radius, the un-geocoded one has no match.
+        assert all(x.source_id != "FAR" for x in listings if x.id in info)
 
 
 def test_filter_by_routes_full_key_and_unknown_token():
@@ -264,6 +281,17 @@ def test_api_listings_applies_route_filter():
         assert {x["source_id"] for x in rows} == {"NEAR"}
         assert rows[0]["nearest_route"] == "U1"
         assert rows[0]["nearest_stop_m"] is not None
+        assert rows[0]["nearby_routes"][0]["route"] == "U1"
+
+        # Annotate mode keeps every listing and labels the near one.
+        resp = client.get(
+            "/api/listings",
+            params={"route_mode": "annotate", "max_stop_distance_m": "500", "min_beds": ""},
+        )
+        rows = resp.json()
+        assert {x["source_id"] for x in rows} >= {"NEAR", "FAR", "NOCOORD"}
+        near = next(x for x in rows if x["source_id"] == "NEAR")
+        assert near["nearest_route"] == "U1"
 
         routes = client.get("/api/transit/routes").json()
         assert routes["count"] == 1

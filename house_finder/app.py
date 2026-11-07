@@ -25,11 +25,19 @@ from .profiles import (
     query_from_params,
     run_profile,
 )
-from .schemas import ListingOut, ProfileIn, ProfileOut, SearchQuery, SyncRunOut
+from .schemas import (
+    ListingOut,
+    NearbyRoute,
+    ProfileIn,
+    ProfileOut,
+    SearchQuery,
+    SyncRunOut,
+)
 from .scheduler import get_scheduler, shutdown_scheduler, start_scheduler
 from .sources import available_sources
 from .sync import mark_seen, run_sync
 from .transit import (
+    annotate_listings_by_routes,
     available_routes as transit_available_routes,
     filter_listings_by_routes,
     sync_transit,
@@ -179,20 +187,30 @@ def _parse_routes(value: str | list[str] | None) -> list[str]:
 
 
 def _transit_context(
-    db: Session, listings: list, routes: list[str], max_distance_m: int
+    db: Session,
+    listings: list,
+    routes: list[str],
+    max_distance_m: int,
+    mode: str = "filter",
 ) -> tuple[list, dict, str]:
-    """Apply the bus-route filter and return (listings, info, warning)."""
+    """Apply the bus-route filter/labelling and return (listings, info, warning)."""
+    if mode == "annotate":
+        return annotate_listings_by_routes(
+            db, listings, max_distance_m, all_routes=True
+        )
     return filter_listings_by_routes(db, listings, routes, max_distance_m)
 
 
-def _listing_out(listing: Listing, info: dict | None = None) -> ListingOut:
+def _listing_out(listing: Listing, info: list[dict] | None = None) -> ListingOut:
     out = ListingOut.model_validate(listing)
     if info:
+        best = info[0]
         out = out.model_copy(
             update={
-                "nearest_route": info.get("route"),
-                "nearest_stop": info.get("stop"),
-                "nearest_stop_m": info.get("distance_m"),
+                "nearest_route": best.get("route"),
+                "nearest_stop": best.get("stop"),
+                "nearest_stop_m": best.get("distance_m"),
+                "nearby_routes": [NearbyRoute(**m) for m in info],
             }
         )
     return out
@@ -262,7 +280,13 @@ def _listings_for_query(
         available_now=query.available_now,
     )
     listings = db.scalars(_order(stmt, sort).limit(limit)).all()
-    return _transit_context(db, listings, query.routes, query.max_stop_distance_m)
+    return _transit_context(
+        db,
+        listings,
+        query.routes,
+        query.max_stop_distance_m,
+        query.route_mode,
+    )
 
 
 # --------------------------------------------------------------------------
@@ -289,6 +313,7 @@ def index(
     active_only: str = Query("true"),
     routes: list[str] = Query(default=[]),
     max_stop_distance_m: str | None = Query(None),
+    route_mode: str = Query("filter"),
 ):
     settings = get_settings()
     furnished_val = {"yes": True, "no": False}.get(furnished)
@@ -308,6 +333,7 @@ def index(
     active_only_b = _to_bool(active_only)
     routes_list = _parse_routes(routes)
     max_distance_i = _to_int(max_stop_distance_m, settings.default_max_stop_distance_m)
+    mode = route_mode if route_mode in {"filter", "annotate"} else "filter"
 
     stmt = select(Listing)
     stmt = _apply_filters(
@@ -330,7 +356,7 @@ def index(
     stmt = _order(stmt, sort)
     listings = db.scalars(stmt.limit(500)).all()
     listings, transit_info, transit_warning = _transit_context(
-        db, list(listings), routes_list, max_distance_i
+        db, list(listings), routes_list, max_distance_i, mode
     )
 
     areas = [
@@ -371,6 +397,7 @@ def index(
                 "routes": ",".join(routes_list),
                 "routes_list": routes_list,
                 "max_stop_distance_m": max_stop_distance_m,
+                "route_mode": mode,
             },
         },
     )
@@ -397,6 +424,7 @@ def listings_partial(
     active_only: str = Query("true"),
     routes: list[str] = Query(default=[]),
     max_stop_distance_m: str | None = Query(None),
+    route_mode: str = Query("filter"),
 ):
     furnished_val = {"yes": True, "no": False}.get(furnished)
     bills_val = {"yes": True, "no": False}.get(bills)
@@ -405,6 +433,7 @@ def listings_partial(
         min_beds = str(settings.default_beds)
     if max_stop_distance_m is None:
         max_stop_distance_m = str(settings.default_max_stop_distance_m)
+    mode = route_mode if route_mode in {"filter", "annotate"} else "filter"
     stmt = _apply_filters(
         select(Listing),
         status=status,
@@ -428,6 +457,7 @@ def listings_partial(
         list(listings),
         _parse_routes(routes),
         _to_int(max_stop_distance_m, settings.default_max_stop_distance_m),
+        mode,
     )
     return templates.TemplateResponse(
         request,
@@ -544,6 +574,7 @@ def save_profile(
     available_now: str = Form(""),
     routes: str = Form(""),
     max_stop_distance_m: str = Form(""),
+    route_mode: str = Form("filter"),
 ):
     """Save the current UI filters as a reusable, schedulable search."""
     settings = get_settings()
@@ -563,6 +594,7 @@ def save_profile(
         max_stop_distance_m=_to_int(
             max_stop_distance_m, settings.default_max_stop_distance_m
         ),
+        route_mode=route_mode,
         max_results=settings.max_results_per_source,
     )
     params = params_from_query(
@@ -693,6 +725,7 @@ def api_listings(
     limit: str = Query("100"),
     routes: list[str] = Query(default=[]),
     max_stop_distance_m: str | None = Query(None),
+    route_mode: str = Query("filter"),
 ):
     settings = get_settings()
     if min_beds is None:
@@ -718,14 +751,22 @@ def api_listings(
         _order(stmt, sort).limit(min(_to_int(limit, 100), 1000))
     ).all()
     routes_list = _parse_routes(routes)
-    if not routes_list:
-        return [_listing_out(x) for x in listings]
+    mode = route_mode if route_mode in {"filter", "annotate"} else "filter"
     distance = (
         settings.default_max_stop_distance_m
         if max_stop_distance_m is None
         else _to_int(max_stop_distance_m, settings.default_max_stop_distance_m)
     )
-    listings, info, _warning = _transit_context(db, list(listings), routes_list, distance)
+    if mode == "annotate":
+        listings, info, _warning = _transit_context(
+            db, list(listings), routes_list, distance, "annotate"
+        )
+        return [_listing_out(x, info.get(x.id)) for x in listings]
+    if not routes_list:
+        return [_listing_out(x) for x in listings]
+    listings, info, _warning = _transit_context(
+        db, list(listings), routes_list, distance, "filter"
+    )
     return [_listing_out(x, info.get(x.id)) for x in listings]
 
 

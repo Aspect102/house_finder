@@ -32,7 +32,9 @@
       <li class="tenancy">From {{ l.available_from }}</li>
       {% endif %}
       {% if tinfo %}
-      <li class="transit">🚌 {{ tinfo.route }} at {{ tinfo.stop }} · {{ tinfo.distance_m }} m</li>
+      {% for t in tinfo %}
+      <li class="transit">🚌 {{ t.route }} at {{ t.stop }} · {{ t.distance_m }} m</li>
+      {% endfor %}
       {% endif %}
     </ul>
     {% if l.previous_price_pcm and l.previous_price_pcm != l.price_pcm %}

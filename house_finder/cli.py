@@ -47,6 +47,7 @@ def _build_query(args: argparse.Namespace) -> SearchQuery:
             getattr(args, "max_stop_distance", 0)
             or settings.default_max_stop_distance_m
         ),
+        route_mode=getattr(args, "route_mode", "") or "filter",
         max_results=getattr(args, "max_results", 0) or settings.max_results_per_source,
     )
 
@@ -205,6 +206,7 @@ def main() -> None:
     p_sync.add_argument("--radius", type=float, default=0)
     p_sync.add_argument("--routes", type=str, default="", help="Comma-separated bus route tokens, e.g. U1,U2")
     p_sync.add_argument("--max-stop-distance", type=int, default=0, help="Max metres from a selected-route stop")
+    p_sync.add_argument("--route-mode", type=str, choices=["filter", "annotate"], default="filter")
     p_sync.add_argument("--tenancy-start-from", type=str, default="", help="Earliest move-in date (ISO)")
     p_sync.add_argument("--tenancy-start-to", type=str, default="", help="Latest move-in date (ISO)")
     p_sync.add_argument("--sources", type=str, default="")
@@ -225,6 +227,7 @@ def main() -> None:
     p_profiles.add_argument("--radius", type=float, default=0)
     p_profiles.add_argument("--routes", type=str, default="", help="Comma-separated bus route tokens")
     p_profiles.add_argument("--max-stop-distance", type=int, default=0)
+    p_profiles.add_argument("--route-mode", type=str, choices=["filter", "annotate"], default="filter")
     p_profiles.add_argument("--tenancy-start-from", type=str, default="")
     p_profiles.add_argument("--tenancy-start-to", type=str, default="")
     p_profiles.add_argument("--sources", type=str, default="")
