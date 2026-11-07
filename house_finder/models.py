@@ -84,6 +84,11 @@ class Listing(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     content_hash: Mapped[str] = mapped_column(String(64), index=True, default="")
+    # Cross-source deduplication: listings that share a fingerprint collapse
+    # onto one canonical row; the others point at it via ``duplicate_of_id``
+    # and are hidden from search results.
+    dedupe_key: Mapped[str] = mapped_column(String(200), default="", index=True)
+    duplicate_of_id: Mapped[int | None] = mapped_column(Integer, index=True)
 
     first_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow, index=True

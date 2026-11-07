@@ -37,6 +37,9 @@
       {% endfor %}
       {% endif %}
     </ul>
+    {% if dup_sources and dup_sources.get(l.id) %}
+    <p class="also-on">🔗 Also on {{ dup_sources.get(l.id)|join(', ') }}</p>
+    {% endif %}
     {% if l.previous_price_pcm and l.previous_price_pcm != l.price_pcm %}
     <p class="price-change">↓ was £{{ '{:,}'.format(l.previous_price_pcm) }}</p>
     {% endif %}

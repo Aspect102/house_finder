@@ -14,6 +14,7 @@ from .models import Listing, ListingStatus
 from .geocode import resolve_coords
 from .normalize import (
     content_hash,
+    dedupe_fingerprint,
     detect_area,
     detect_bills_included,
     detect_furnished,
@@ -62,6 +63,7 @@ def _clean(raw: RawListing) -> dict:
     )
     # Normalise per-person student rents to a whole-property monthly figure.
     price_pcm = whole_property_price(raw.price_pcm, beds)
+    address = raw.address.strip()
     return {
         "title": raw.title.strip(),
         "price_pcm": price_pcm,
@@ -69,7 +71,7 @@ def _clean(raw: RawListing) -> dict:
         "beds": beds,
         "baths": raw.baths,
         "property_type": raw.property_type.strip(),
-        "address": raw.address.strip(),
+        "address": address,
         "area": area,
         "postcode": postcode,
         "latitude": raw.latitude,
@@ -81,6 +83,7 @@ def _clean(raw: RawListing) -> dict:
         "available_now": bool(available_now),
         "description": raw.description.strip(),
         "image_url": raw.image_url.strip(),
+        "dedupe_key": dedupe_fingerprint(address, postcode, beds, price_pcm),
     }
 
 
@@ -166,3 +169,77 @@ def ingest(session: Session, raws: list[RawListing]) -> IngestStats:
 
     session.flush()
     return stats
+
+
+#: Preference order when choosing the canonical row of a duplicate group.
+SOURCE_PRIORITY = ("rightmove", "openrent", "unihomes", "onthemarket", "zoopla", "spareroom")
+
+
+def _source_rank(source: str) -> int:
+    try:
+        return SOURCE_PRIORITY.index(source)
+    except ValueError:
+        return len(SOURCE_PRIORITY)
+
+
+def dedupe_listings(session: Session) -> int:
+    """Link cross-source duplicates to one canonical listing.
+
+    Recomputes ``duplicate_of_id`` for every listing from its ``dedupe_key``.
+    Within a group the canonical row is the highest-priority source, then the
+    active, geo-located, priced, earliest one; every other row is marked as a
+    duplicate and hidden from search results. Returns the number linked.
+    """
+    listings = session.scalars(select(Listing)).all()
+    for listing in listings:
+        listing.duplicate_of_id = None
+        # Recompute so existing rows are backfilled and edits are picked up.
+        listing.dedupe_key = dedupe_fingerprint(
+            listing.address, listing.postcode, listing.beds, listing.price_pcm
+        )
+
+    groups: dict[str, list[Listing]] = {}
+    for listing in listings:
+        if listing.dedupe_key:
+            groups.setdefault(listing.dedupe_key, []).append(listing)
+
+    now = datetime.now(timezone.utc)
+    marked = 0
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        group.sort(
+            key=lambda l: (
+                _source_rank(l.source),
+                0 if l.is_active else 1,
+                0 if l.latitude is not None else 1,
+                0 if l.price_pcm else 1,
+                l.first_seen or now,
+                l.id or 0,
+            )
+        )
+        canonical = group[0]
+        for duplicate in group[1:]:
+            if duplicate.id == canonical.id:
+                continue
+            duplicate.duplicate_of_id = canonical.id
+            marked += 1
+    session.flush()
+    return marked
+
+
+def duplicate_sources(session: Session, listing_ids: list[int]) -> dict[int, list[str]]:
+    """Map canonical listing id -> sources of its hidden duplicates."""
+    if not listing_ids:
+        return {}
+    rows = session.execute(
+        select(Listing.duplicate_of_id, Listing.source).where(
+            Listing.duplicate_of_id.in_(listing_ids)
+        )
+    ).all()
+    out: dict[int, list[str]] = {}
+    for canonical_id, source in rows:
+        sources = out.setdefault(canonical_id, [])
+        if source not in sources:
+            sources.append(source)
+    return out

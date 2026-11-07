@@ -249,5 +249,74 @@ def normalise_postcode_key(postcode: str) -> str:
     return re.sub(r"\s+", "", postcode or "").upper()
 
 
+def postcode_outcode(postcode: str) -> str:
+    """Return the outcode (e.g. ``BA2``) of a postcode, full or partial."""
+    key = normalise_postcode_key(postcode)
+    # A full UK postcode is the outcode plus a 3-character inward code.
+    return key[:-3] if len(key) >= 5 else key
+
+
+#: Generic address words dropped before comparing addresses across sources.
+#: "bath" is dropped because all listings are in Bath and some sources include
+#: it in the address while others do not.
+_ADDRESS_NOISE = {
+    "flat", "apartment", "apt", "house", "the", "and", "property", "let",
+    "bath", "somerset", "uk", "england",
+    "bed", "beds", "bedroom", "bedrooms", "bathroom", "bathrooms",
+    "ensuite", "en", "suite", "double", "single", "reception",
+    "terraced", "detached", "semi", "bungalow", "studio", "maisonette",
+    "cottage", "duplex", "penthouse",
+}
+
+# "6 bed terraced", "3 bathroom", "2 double" — descriptors, not the street.
+_BED_BATH_DESC_RE = re.compile(
+    r"\b\d+\s*(?:bed|beds|bedroom|bedrooms|bath|bathroom|bathrooms|"
+    r"double|single|reception)s?\b",
+    re.IGNORECASE,
+)
+
+
+def normalise_address(address: str | None) -> str:
+    """Lower-case, punctuation-free street address for cross-source matching."""
+    text = (address or "").lower()
+    text = _POSTCODE_RE.sub(" ", text)
+    text = _OUTCODE_RE.sub(" ", text)
+    text = _BED_BATH_DESC_RE.sub(" ", text)
+    text = re.sub(r"[^a-z0-9 ]+", " ", text)
+    tokens = [t for t in text.split() if t and t not in _ADDRESS_NOISE]
+    return " ".join(tokens)
+
+
+def dedupe_fingerprint(
+    address: str | None,
+    postcode: str | None,
+    beds: int | None,
+    price_pcm: int | None,
+    *,
+    price_bucket: int = 100,
+) -> str:
+    """A conservative cross-source identity key for a listing.
+
+    The same property listed on two portals should normalise to the same key.
+    We require an outcode, a bed count and a street address, and include the
+    price rounded to ``price_bucket`` so two different homes on the same street
+    (common with street-level addresses) are not merged. The outcode is used
+    rather than the full postcode because sources vary in how precise they are.
+    Returns ``""`` when there is not enough information to match safely.
+    """
+    if beds is None:
+        return ""
+    outcode = postcode_outcode(postcode or "")
+    if not outcode:
+        return ""
+    addr = normalise_address(address)
+    if not addr:
+        return ""
+    bucket = 0
+    if price_pcm:
+        bucket = int(round(price_pcm / price_bucket) * price_bucket)
+    return f"{outcode}|{beds}|{bucket}|{addr}"
+
+
 def dedupe_key(source: str, source_id: str) -> str:
     return f"{source}:{source_id}"

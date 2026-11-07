@@ -46,6 +46,8 @@ def _migrate_sqlite() -> None:
     additions = {
         "tenancy_start": "DATE",
         "available_now": "BOOLEAN DEFAULT 0",
+        "dedupe_key": "VARCHAR(200) DEFAULT ''",
+        "duplicate_of_id": "INTEGER",
     }
     with engine.begin() as conn:
         for column, ddl in additions.items():

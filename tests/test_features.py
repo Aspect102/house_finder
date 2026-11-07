@@ -374,6 +374,14 @@ def test_openrent_parser_multiplies_per_person_rent():
     assert listing.address == "Brook Road, BA2"
 
 
+def test_openrent_detects_challenge_page():
+    from house_finder.sources.openrent import _looks_blocked
+
+    assert _looks_blocked("<title>Human Verification</title> ... captcha ...")
+    assert _looks_blocked("Just a moment...")
+    assert not _looks_blocked('<a class="pli search-property-card" href="/x">')
+
+
 def test_spareroom_parser_reads_weekly_room_rate():
     from house_finder.sources.spareroom import SpareRoomSource
 

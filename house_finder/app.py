@@ -18,6 +18,7 @@ from . import __version__
 from .config import get_settings
 from .db import get_db, init_db
 from .models import Listing, ListingStatus, SearchProfile, SyncRun
+from .pipeline import duplicate_sources
 from .profiles import (
     params_from_query,
     profile_apply_qs,
@@ -110,6 +111,8 @@ def _apply_filters(stmt, *, status, source, min_beds, max_beds, min_price, max_p
         )
     if active_only:
         stmt = stmt.where(Listing.is_active.is_(True))
+    # Never surface cross-source duplicates; they point at a canonical row.
+    stmt = stmt.where(Listing.duplicate_of_id.is_(None))
     return stmt
 
 
@@ -219,7 +222,9 @@ def _listing_out(listing: Listing, info: list[dict] | None = None) -> ListingOut
 def _stats_context(db: Session) -> dict:
     """Shared context for the stats strip (used by index and sync responses)."""
     rows = db.execute(
-        select(Listing.status, func.count()).group_by(Listing.status)
+        select(Listing.status, func.count())
+        .where(Listing.duplicate_of_id.is_(None))
+        .group_by(Listing.status)
     ).all()
     # SQLAlchemy stores Enum members; templates look up plain string keys.
     counts = {
@@ -230,7 +235,9 @@ def _stats_context(db: Session) -> dict:
         select(SyncRun).order_by(SyncRun.started_at.desc()).limit(1)
     ).first()
     active_total = db.scalar(
-        select(func.count()).select_from(Listing).where(Listing.is_active.is_(True))
+        select(func.count())
+        .select_from(Listing)
+        .where(Listing.is_active.is_(True), Listing.duplicate_of_id.is_(None))
     ) or 0
     return {
         "counts": counts,
@@ -376,6 +383,7 @@ def index(
             "transit_routes": transit_available_routes(),
             "transit_info": transit_info,
             "transit_warning": transit_warning,
+            "dup_sources": duplicate_sources(db, [x.id for x in listings]),
             **_stats_context(db),
             **_profiles_context(db),
             "filters": {
@@ -466,6 +474,7 @@ def listings_partial(
             "listings": listings,
             "transit_info": transit_info,
             "transit_warning": transit_warning,
+            "dup_sources": duplicate_sources(db, [x.id for x in listings]),
         },
     )
 
@@ -654,6 +663,7 @@ def run_saved_profile(
                 "listings": listings,
                 "transit_info": transit_info,
                 "transit_warning": transit_warning,
+                "dup_sources": duplicate_sources(db, [x.id for x in listings]),
                 **_stats_context(db),
             },
         )
@@ -801,10 +811,18 @@ def api_sync_runs(db: Session = Depends(get_db), limit: int = Query(20, le=200))
 @app.get("/api/stats")
 def api_stats(db: Session = Depends(get_db)):
     counts = dict(
-        db.execute(select(Listing.status, func.count()).group_by(Listing.status)).all()
+        db.execute(
+            select(Listing.status, func.count())
+            .where(Listing.duplicate_of_id.is_(None))
+            .group_by(Listing.status)
+        ).all()
     )
     by_source = dict(
-        db.execute(select(Listing.source, func.count()).group_by(Listing.source)).all()
+        db.execute(
+            select(Listing.source, func.count())
+            .where(Listing.duplicate_of_id.is_(None))
+            .group_by(Listing.source)
+        ).all()
     )
     return {
         "by_status": {k.value if hasattr(k, "value") else str(k): v for k, v in counts.items()},

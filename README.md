@@ -8,6 +8,10 @@ Enabled by default: **Rightmove, UniHomes, OpenRent, OnTheMarket, Zoopla**.
 **SpareRoom** is implemented but opt-in, because it is room-oriented and
 frequently serves an anti-bot challenge.
 
+> OpenRent and Zoopla aggressively challenge datacenter IPs. From a hosting
+> provider they may return nothing (OpenRent serves a "Human Verification"
+> page); from a home connection they work normally.
+
 ## Features
 
 - **Pluggable source adapters** — HTTP scraping first, with a Playwright
@@ -24,6 +28,9 @@ frequently serves an anti-bot challenge.
 - **Whole-property pricing** — per-person student rents (common on
   OnTheMarket/Zoopla) are converted to a whole-house monthly figure, and
   per-room "house share" listings are not counted as whole 6-bed houses.
+- **Deduplication** — a listing returned twice in a page, or the same property
+  advertised on several portals, is collapsed to a single card; the card notes
+  the other sites it was seen on.
 - **Bus-route proximity** — filter listings by maximum walking distance to a
   stop on a chosen bus route (e.g. a First Bus **U1**–**U6** university route
   or The Big Lemon **20**). Route and stop data comes from the DfT **Bus Open
@@ -84,6 +91,28 @@ python -m house_finder.cli profiles add --name "6-bed 2027" --beds 6 --max-price
   --tenancy-start-from 2027-07-01 --tenancy-start-to 2027-09-30
 python -m house_finder.cli profiles run --name "6-bed 2027"
 python -m house_finder.cli profiles run          # all enabled searches
+```
+
+## Deduplication
+
+Two layers:
+
+- **Within a source** — a listing is upserted by `(source, source_id)`, and
+  repeats within a single page/batch are dropped.
+- **Across sources** — every listing gets a fingerprint built from its
+  **outcode**, **bed count**, normalised **street address** and **price**
+  (rounded to the nearest £100; the price stops two different homes on the same
+  street being merged when addresses are street-level). Listings sharing a
+  fingerprint collapse onto one canonical row, chosen by source priority
+  (Rightmove › OpenRent › UniHomes › OnTheMarket › Zoopla › SpareRoom), then
+  active/geo-located/priced/earliest. The others are marked as duplicates and
+  hidden from search; the canonical card shows **"Also on …"**.
+
+The pass runs automatically at the end of every sync. Run it by hand (it also
+backfills fingerprints) with:
+
+```bash
+python -m house_finder.cli dedupe
 ```
 
 ## Bus routes (BODS)

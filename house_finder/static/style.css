@@ -214,6 +214,7 @@ a:hover { text-decoration: underline; }
 .transit-refresh { margin: .1rem 0 .5rem; }
 .hint.warn { color: var(--warn); }
 .facts li.transit { color: var(--accent); }
+.also-on { margin: 0; color: var(--muted); font-size: .72rem; }
 
 /* Sync issues */
 .sync-errors {

@@ -11,7 +11,7 @@ from sqlalchemy import select
 from .config import get_settings
 from .db import session_scope
 from .models import Listing, ListingStatus, SyncRun, SyncSourceResult, SyncStatus
-from .pipeline import ingest
+from .pipeline import dedupe_listings, ingest
 from .schemas import SearchQuery
 from .sources import SourceError, get_sources
 
@@ -94,6 +94,12 @@ def run_sync(
         except Exception as exc:  # pragma: no cover - unexpected
             errors.append(f"{source.name}: {exc!r}")
             log.exception("sync %s crashed", source.name)
+
+    # Collapse the same property listed on multiple sites onto one row.
+    with session_scope() as session:
+        dupes = dedupe_listings(session)
+    if dupes:
+        log.info("dedupe: %d duplicate listing(s) linked", dupes)
 
     status = SyncStatus.SUCCESS
     if errors and ok_count == 0:

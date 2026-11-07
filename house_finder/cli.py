@@ -161,6 +161,15 @@ def _cmd_initdb(_: argparse.Namespace) -> None:
     print("Database initialised.")
 
 
+def _cmd_dedupe(_: argparse.Namespace) -> None:
+    from .pipeline import dedupe_listings
+
+    init_db()
+    with session_scope() as session:
+        marked = dedupe_listings(session)
+    print(f"Linked {marked} duplicate listing(s).")
+
+
 def _cmd_transit(args: argparse.Namespace) -> None:
     from .transit import available_routes, sync_transit
 
@@ -241,6 +250,9 @@ def main() -> None:
 
     p_init = sub.add_parser("initdb", help="Create database tables")
     p_init.set_defaults(func=_cmd_initdb)
+
+    p_dedupe = sub.add_parser("dedupe", help="Link cross-source duplicate listings")
+    p_dedupe.set_defaults(func=_cmd_dedupe)
 
     p_transit = sub.add_parser("transit", help="Manage bus-route (BODS) data")
     p_transit.add_argument("action", choices=["sync", "routes", "geocode"])

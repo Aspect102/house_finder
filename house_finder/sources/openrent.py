@@ -44,6 +44,22 @@ _AVAIL_RE = re.compile(
 )
 _TAG_RE = re.compile(r"<[^>]+>")
 
+_BLOCK_MARKERS = (
+    "human verification",
+    "captcha",
+    "just a moment",
+    "cf-challenge",
+    "attention required",
+    "access denied",
+    "are you a human",
+)
+
+
+def _looks_blocked(html: str) -> bool:
+    """True when the page is an anti-bot challenge rather than results."""
+    low = (html or "").lower()
+    return any(marker in low for marker in _BLOCK_MARKERS)
+
 
 class OpenRentSource(BaseSource):
     name = "openrent"
@@ -79,6 +95,11 @@ class OpenRentSource(BaseSource):
                     raise
                 log.info("openrent: HTTP failed, trying browser")
                 html = self.get_html_with_browser(url, wait_selector=".search-property-card")
+            if _looks_blocked(html):
+                raise SourceError(
+                    "OpenRent served a human-verification challenge "
+                    "(the host's IP is likely blocked; a residential proxy is needed)"
+                )
             page = self._parse_cards(html)
             if not page:
                 break
