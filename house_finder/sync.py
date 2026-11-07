@@ -13,7 +13,7 @@ from .db import session_scope
 from .models import Listing, ListingStatus, SyncRun, SyncSourceResult, SyncStatus
 from .pipeline import dedupe_listings, ingest
 from .schemas import SearchQuery
-from .sources import SourceError, get_sources
+from .sources import SourceBlocked, SourceError, get_sources
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +47,7 @@ def run_sync(
 
     all_new: list[Listing] = []
     errors: list[str] = []
+    blocked: list[str] = []
     total_found = total_new = total_updated = 0
     ok_count = 0
 
@@ -78,6 +79,22 @@ def run_sync(
                 stats.new,
                 stats.updated,
             )
+        except SourceBlocked as exc:
+            # A known anti-bot block (e.g. OpenRent from a datacenter IP) is a
+            # benign skip, not a failure: record it but keep the run successful.
+            blocked.append(f"{source.name}: {exc}")
+            log.warning("sync %s blocked: %s", source.name, exc)
+            with session_scope() as session:
+                session.add(
+                    SyncSourceResult(
+                        run_id=run_id,
+                        source=source.name,
+                        ok=True,
+                        error=f"blocked: {exc}"[:2000],
+                        duration_ms=int((time.monotonic() - started) * 1000),
+                    )
+                )
+            ok_count += 1
         except SourceError as exc:
             errors.append(f"{source.name}: {exc}")
             log.warning("sync %s failed: %s", source.name, exc)

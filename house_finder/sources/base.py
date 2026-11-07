@@ -20,6 +20,15 @@ class SourceError(RuntimeError):
     """Raised when a source cannot be fetched or parsed."""
 
 
+class SourceBlocked(SourceError):
+    """Raised when a source serves an anti-bot challenge instead of results.
+
+    This is expected from datacenter IPs and is treated as a benign skip (not a
+    sync failure). Configure ``HF_PROXY_URL`` with a residential proxy to get
+    real results.
+    """
+
+
 class BaseSource(abc.ABC):
     """A pluggable housing source.
 
@@ -63,6 +72,11 @@ class BaseSource(abc.ABC):
             "Accept": "text/html,application/xhtml+xml,application/json;q=0.9,*/*;q=0.8",
             "Accept-Language": "en-GB,en;q=0.9",
         }
+
+    def _proxy(self) -> dict[str, str]:
+        """httpx proxy kwarg, when HF_PROXY_URL is set."""
+        url = (self.settings.proxy_url or "").strip()
+        return {"proxy": url} if url else {}
 
     def _robots_allows(self, url: str) -> bool:
         if not self.settings.respect_robots:
@@ -108,6 +122,7 @@ class BaseSource(abc.ABC):
                 headers=self._headers(),
                 timeout=self.settings.request_timeout,
                 follow_redirects=True,
+                **self._proxy(),
             )
             resp.raise_for_status()
             return resp.text
@@ -125,6 +140,7 @@ class BaseSource(abc.ABC):
                 headers=self._headers(),
                 timeout=self.settings.request_timeout,
                 follow_redirects=True,
+                **self._proxy(),
             )
             resp.raise_for_status()
             return resp.json()
@@ -149,8 +165,11 @@ class BaseSource(abc.ABC):
 
         self._throttle()
         timeout_ms = self.settings.request_timeout * 1000
+        launch_kwargs: dict = {"headless": True}
+        if self.settings.proxy_url:
+            launch_kwargs["proxy"] = {"server": self.settings.proxy_url}
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(**launch_kwargs)
             try:
                 page = browser.new_page(
                     user_agent=self.settings.user_agent,

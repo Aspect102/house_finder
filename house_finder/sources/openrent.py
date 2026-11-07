@@ -20,7 +20,7 @@ from ..normalize import (
     parse_price,
 )
 from ..schemas import RawListing, SearchQuery
-from .base import BaseSource, SourceError
+from .base import BaseSource, SourceBlocked, SourceError
 
 log = logging.getLogger(__name__)
 
@@ -96,9 +96,9 @@ class OpenRentSource(BaseSource):
                 log.info("openrent: HTTP failed, trying browser")
                 html = self.get_html_with_browser(url, wait_selector=".search-property-card")
             if _looks_blocked(html):
-                raise SourceError(
+                raise SourceBlocked(
                     "OpenRent served a human-verification challenge "
-                    "(the host's IP is likely blocked; a residential proxy is needed)"
+                    "(datacenter IP; set HF_PROXY_URL to a residential proxy)"
                 )
             page = self._parse_cards(html)
             if not page:

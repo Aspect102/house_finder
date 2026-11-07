@@ -382,6 +382,23 @@ def test_openrent_detects_challenge_page():
     assert not _looks_blocked('<a class="pli search-property-card" href="/x">')
 
 
+def test_blocked_source_keeps_sync_successful(monkeypatch):
+    from house_finder import sync as sync_mod
+    from house_finder.sources import BaseSource, SourceBlocked
+
+    class Blocked(BaseSource):
+        name = "blocked"
+
+        def fetch(self, query):
+            raise SourceBlocked("human-verification challenge")
+
+    monkeypatch.setattr(sync_mod, "get_sources", lambda names=None: [Blocked()])
+    run = sync_mod.run_sync(notify=False)
+    # A block is a benign skip: the run succeeds and reports no errors.
+    assert run.status.value == "success"
+    assert run.errors == ""
+
+
 def test_spareroom_parser_reads_weekly_room_rate():
     from house_finder.sources.spareroom import SpareRoomSource
 

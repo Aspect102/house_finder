@@ -10,7 +10,9 @@ frequently serves an anti-bot challenge.
 
 > OpenRent and Zoopla aggressively challenge datacenter IPs. From a hosting
 > provider they may return nothing (OpenRent serves a "Human Verification"
-> page); from a home connection they work normally.
+> page); from a home connection they work normally. A blocked source is
+> reported as a benign skip, not a sync failure. To scrape them from a server,
+> set `HF_PROXY_URL` to a residential HTTP(S) proxy.
 
 ## Features
 
@@ -228,6 +230,7 @@ Key ones:
 | `HF_MAX_PAGES_PER_SOURCE` | `6` | Result pages fetched per source |
 | `HF_RESPECT_ROBOTS` | `true` | Honour robots.txt when available |
 | `HF_USE_PLAYWRIGHT_FALLBACK` | `true` | Browser fallback for JS/bot-protected pages |
+| `HF_PROXY_URL` | – | Residential HTTP(S) proxy for OpenRent/Zoopla |
 | `HF_BODS_API_KEY` | – | Bus Open Data Service API key (bus-route filter) |
 | `HF_BODS_ROUTES` | `U1,U1N,U2,U3,U4,U6,20@Big Lemon` | Lines to track (`LINE` or `LINE@OPERATOR`) |
 | `HF_BODS_ADMIN_AREAS` | `018` | ATCO areas used to keep stops local |

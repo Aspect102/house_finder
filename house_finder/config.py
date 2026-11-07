@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     )
     respect_robots: bool = True
     use_playwright_fallback: bool = True
+    # Optional HTTP(S) proxy for sources that block datacenter IPs (OpenRent,
+    # Zoopla). e.g. "http://user:pass@host:port". Empty = direct connection.
+    proxy_url: str = ""
     # Max result pages fetched per source per sync.
     max_pages_per_source: int = 6
     # Extra settle time after a browser page load (lazy-loaded cards).
