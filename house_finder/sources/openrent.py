@@ -90,15 +90,17 @@ class OpenRentSource(BaseSource):
             url = self.search_url(query, skip=skip)
             try:
                 html = self.get_text(url)
+                if not html.strip():
+                    raise SourceError("empty response")
             except SourceError:
                 if not self.settings.use_playwright_fallback:
                     raise
-                log.info("openrent: HTTP failed, trying browser")
+                log.info("openrent: HTTP failed/empty, trying browser")
                 html = self.get_html_with_browser(url, wait_selector=".search-property-card")
-            if _looks_blocked(html):
+            if not html.strip() or _looks_blocked(html):
                 raise SourceBlocked(
-                    "OpenRent served a human-verification challenge "
-                    "(datacenter IP; set HF_PROXY_URL to a residential proxy)"
+                    "OpenRent is challenging this host (Cloudflare 'confirm you are human' "
+                    "or an empty response); the exit IP is blocked"
                 )
             page = self._parse_cards(html)
             if not page:
