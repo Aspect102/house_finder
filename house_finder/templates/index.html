@@ -112,9 +112,15 @@
           {% else %}
           <p class="hint">No bus-route data yet. Use “Refresh bus data” below.</p>
           {% endif %}
-          <label>Max walk to stop (m)
-            <input type="number" name="max_stop_distance_m" min="0" step="50" value="{{ filters.max_stop_distance_m }}" />
-          </label>
+          <div class="row">
+            <label>Max walk (m)
+              <input id="max-stop-distance" type="number" name="max_stop_distance_m" min="0" step="50" value="{{ filters.max_stop_distance_m }}" />
+            </label>
+            <label>… or time (min)
+              <input id="max-stop-time" type="number" min="0" step="1" inputmode="numeric" />
+            </label>
+          </div>
+          <p class="hint">Distance and walking time are linked (≈4.8 km/h).</p>
         </fieldset>
         <label>Status
           <select name="status">
@@ -213,5 +219,48 @@
   <footer class="foot">
     <p>House Finder · personal use · respect source Terms of Service.</p>
   </footer>
+
+  <script>
+    // Keep "max walk (metres)" and "walking time (minutes)" in sync.
+    // Average walking speed ~80 m/min (≈4.8 km/h); metres is what we submit
+    // and search on. Editing either field updates the other and re-runs the
+    // search (debounced), so entering a time is enough to filter by it.
+    (function () {
+      const M_PER_MIN = 80;
+      const dist = document.getElementById("max-stop-distance");
+      const time = document.getElementById("max-stop-time");
+      if (!dist || !time) return;
+
+      const distToTime = () => {
+        const m = parseFloat(dist.value);
+        time.value = Number.isFinite(m) && m > 0 ? Math.round(m / M_PER_MIN) : "";
+      };
+      const timeToDist = () => {
+        const t = parseFloat(time.value);
+        dist.value = Number.isFinite(t) && t >= 0 ? Math.round(t * M_PER_MIN) : "";
+      };
+
+      // Trigger the form's HTMX search by dispatching the change event htmx
+      // already listens for (on the named metres input).
+      let timer = null;
+      const search = () => {
+        clearTimeout(timer);
+        timer = setTimeout(
+          () => dist.dispatchEvent(new Event("change", { bubbles: true })),
+          400
+        );
+      };
+
+      distToTime(); // reflect the server-rendered metres value on load
+      dist.addEventListener("input", () => {
+        distToTime();
+        search();
+      });
+      time.addEventListener("input", () => {
+        timeToDist();
+        search();
+      });
+    })();
+  </script>
 </body>
 </html>
