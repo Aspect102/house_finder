@@ -1,0 +1,11 @@
+[Unit]
+Description=Run House Finder sync every 3 hours
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=3h
+Persistent=true
+Unit=house-finder-sync.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,21 @@
+[Unit]
+Description=House Finder — Bath student housing aggregator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Adjust User/Group and paths to match your install. The leading "-" makes
+# the EnvironmentFile optional, so the service still starts without a .env.
+User=housefinder
+Group=housefinder
+WorkingDirectory=/home/housefinder/Documents/house_finder
+EnvironmentFile=-/home/housefinder/Documents/house_finder/.env
+ExecStart=/home/housefinder/Documents/house_finder/.venv/bin/uvicorn house_finder.app:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=10
+# The app runs its own internal scheduler (HF_SCHEDULER_ENABLED=true),
+# so no separate timer unit is required.
+
+[Install]
+WantedBy=multi-user.target

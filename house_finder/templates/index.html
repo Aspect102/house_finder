@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>House Finder — Bath student housing</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">🏠</span>
+      <div>
+        <h1>House Finder</h1>
+        <p class="sub">Bath student housing, aggregated</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <form hx-post="/sync" hx-target="#results" hx-swap="innerHTML" hx-indicator="#sync-spinner" class="inline">
+        <input type="hidden" name="min_beds" value="{{ filters.min_beds }}" />
+        <input type="hidden" name="max_price" value="{{ filters.max_price }}" />
+        <input type="hidden" name="tenancy_start_from" value="{{ filters.tenancy_start_from }}" />
+        <input type="hidden" name="tenancy_start_to" value="{{ filters.tenancy_start_to }}" />
+        <button class="btn primary" type="submit">↻ Sync now</button>
+        <span id="sync-spinner" class="htmx-indicator spinner">syncing…</span>
+      </form>
+      <form method="post" action="/listings/mark-seen" class="inline">
+        <button class="btn" type="submit">Mark all seen</button>
+      </form>
+    </div>
+  </header>
+
+  <section class="stats" id="stats">
+    {% include "partials/stats.html" %}
+  </section>
+
+  {% if last_run and last_run.errors %}
+  <details class="sync-errors">
+    <summary>Last sync reported {{ last_run.errors.split('\n')|length }} issue(s)</summary>
+    <pre>{{ last_run.errors }}</pre>
+  </details>
+  {% endif %}
+
+  <main class="layout">
+    <aside class="filters">
+      <h2>Search</h2>
+      <form
+        hx-get="/partials/listings"
+        hx-target="#results"
+        hx-trigger="change, keyup changed delay:400ms from:input[name='q']"
+        hx-include="this"
+      >
+        <label>Keyword
+          <input type="search" name="q" value="{{ filters.q }}" placeholder="e.g. bills included" />
+        </label>
+        <label>Min beds
+          <input type="number" name="min_beds" min="0" value="{{ filters.min_beds }}" />
+        </label>
+        <label>Max beds
+          <input type="number" name="max_beds" min="0" value="{{ filters.max_beds or '' }}" />
+        </label>
+        <div class="row">
+          <label>Min £ pcm
+            <input type="number" name="min_price" min="0" step="50" value="{{ filters.min_price or '' }}" />
+          </label>
+          <label>Max £ pcm
+            <input type="number" name="max_price" min="0" step="50" value="{{ filters.max_price or '' }}" />
+          </label>
+        </div>
+        <fieldset class="date-range">
+          <legend>Tenancy start</legend>
+          <div class="row">
+            <label>From
+              <input type="date" name="tenancy_start_from" value="{{ filters.tenancy_start_from }}" />
+            </label>
+            <label>To
+              <input type="date" name="tenancy_start_to" value="{{ filters.tenancy_start_to }}" />
+            </label>
+          </div>
+          <label class="check">
+            <input type="checkbox" name="available_now" value="yes" {% if filters.available_now == 'yes' %}checked{% endif %} />
+            Available now only
+          </label>
+        </fieldset>
+        <label>Area
+          <select name="area">
+            <option value="">Any</option>
+            {% for a in areas %}
+            <option value="{{ a }}" {% if filters.area == a %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>Source
+          <select name="source">
+            <option value="">All sources</option>
+            {% for s in sources %}
+            <option value="{{ s }}" {% if filters.source == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <fieldset class="bus-routes">
+          <legend>Bus routes</legend>
+          {% if transit_routes %}
+          <label>Near a stop on
+            <select name="routes" multiple size="{{ 6 if transit_routes|length > 6 else transit_routes|length }}">
+              {% for r in transit_routes %}
+              <option value="{{ r.key }}" {% if r.key in filters.routes_list or r.line_name in filters.routes_list %}selected{% endif %}>{{ r.label }} · {{ r.stop_count }} stops</option>
+              {% endfor %}
+            </select>
+          </label>
+          {% else %}
+          <p class="hint">No bus-route data yet. Use “Refresh bus data” below.</p>
+          {% endif %}
+          <label>Max walk to stop (m)
+            <input type="number" name="max_stop_distance_m" min="0" step="50" value="{{ filters.max_stop_distance_m }}" />
+          </label>
+        </fieldset>
+        <label>Status
+          <select name="status">
+            <option value="">Any</option>
+            {% for st in ['new','seen','shortlisted','hidden'] %}
+            <option value="{{ st }}" {% if filters.status == st %}selected{% endif %}>{{ st }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <div class="row">
+          <label>Furnished
+            <select name="furnished">
+              <option value="">Any</option>
+              <option value="yes" {% if filters.furnished == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if filters.furnished == 'no' %}selected{% endif %}>No</option>
+            </select>
+          </label>
+          <label>Bills incl.
+            <select name="bills">
+              <option value="">Any</option>
+              <option value="yes" {% if filters.bills == 'yes' %}selected{% endif %}>Yes</option>
+              <option value="no" {% if filters.bills == 'no' %}selected{% endif %}>No</option>
+            </select>
+          </label>
+        </div>
+        <label>Sort by
+          <select name="sort">
+            <option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>Newest first</option>
+            <option value="price_asc" {% if filters.sort == 'price_asc' %}selected{% endif %}>Price (low → high)</option>
+            <option value="price_desc" {% if filters.sort == 'price_desc' %}selected{% endif %}>Price (high → low)</option>
+            <option value="pppw_asc" {% if filters.sort == 'pppw_asc' %}selected{% endif %}>£ per person/week</option>
+            <option value="beds_desc" {% if filters.sort == 'beds_desc' %}selected{% endif %}>Most beds</option>
+            <option value="beds_asc" {% if filters.sort == 'beds_asc' %}selected{% endif %}>Fewest beds</option>
+            <option value="tenancy_asc" {% if filters.sort == 'tenancy_asc' %}selected{% endif %}>Tenancy start (earliest)</option>
+            <option value="tenancy_desc" {% if filters.sort == 'tenancy_desc' %}selected{% endif %}>Tenancy start (latest)</option>
+          </select>
+        </label>
+        <label class="check">
+          <input type="checkbox" name="active_only" value="true" {% if filters.active_only %}checked{% endif %} />
+          Active listings only
+        </label>
+        <p class="hint"><a href="/">Reset filters</a></p>
+      </form>
+
+      <form hx-post="/transit/sync" hx-target="#transit-status" hx-swap="outerHTML" class="inline transit-refresh">
+        <button class="btn tiny" type="submit">↻ Refresh bus data</button>
+        <span id="transit-status" class="hint"></span>
+      </form>
+      {% if transit_warning %}<p class="hint warn">{{ transit_warning }}</p>{% endif %}
+
+      <div class="saved-searches">
+        <h2>Saved searches</h2>
+        <p class="hint">Scheduled runs sync every enabled saved search.</p>
+        <form method="post" action="/profiles" class="save-profile">
+          <input type="text" name="name" placeholder="Name, e.g. 6-bed July 2027" required maxlength="120" />
+          <input type="hidden" name="min_beds" value="{{ filters.min_beds }}" />
+          <input type="hidden" name="max_beds" value="{{ filters.max_beds }}" />
+          <input type="hidden" name="min_price" value="{{ filters.min_price }}" />
+          <input type="hidden" name="max_price" value="{{ filters.max_price }}" />
+          <input type="hidden" name="tenancy_start_from" value="{{ filters.tenancy_start_from }}" />
+          <input type="hidden" name="tenancy_start_to" value="{{ filters.tenancy_start_to }}" />
+          <input type="hidden" name="q" value="{{ filters.q }}" />
+          <input type="hidden" name="furnished" value="{{ filters.furnished }}" />
+          <input type="hidden" name="bills" value="{{ filters.bills }}" />
+          <input type="hidden" name="source" value="{{ filters.source }}" />
+          <input type="hidden" name="available_now" value="{{ filters.available_now }}" />
+          <input type="hidden" name="routes" value="{{ filters.routes }}" />
+          <input type="hidden" name="max_stop_distance_m" value="{{ filters.max_stop_distance_m }}" />
+          <button class="btn tiny" type="submit">＋ Save current filters</button>
+        </form>
+        {% if profiles %}
+        <ul class="profile-list">
+          {% for p in profiles %}
+          <li>
+            <a class="profile-link" href="/?{{ p.apply_qs }}" title="Apply this search">{{ p.name }}</a>
+            <form hx-post="/profiles/{{ p.id }}/run" hx-target="#results" hx-swap="innerHTML" hx-indicator="#sync-spinner" class="inline">
+              <button class="btn tiny" type="submit">Run</button>
+            </form>
+            <form method="post" action="/profiles/{{ p.id }}/delete" class="inline">
+              <button class="btn tiny ghost" type="submit" title="Delete saved search">✕</button>
+            </form>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="hint">No saved searches yet.</p>
+        {% endif %}
+      </div>
+    </aside>
+
+    <section id="results" class="results">
+      {% include "partials/listing_cards.html" %}
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>House Finder · personal use · respect source Terms of Service.</p>
+  </footer>
+</body>
+</html>

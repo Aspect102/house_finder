@@ -1,0 +1,56 @@
+<article id="listing-{{ l.id }}" class="card status-{{ l.status.value }}">
+  {% set tinfo = transit_info.get(l.id) if transit_info else none %}
+  <div class="card-media">
+    {% if l.image_url %}
+    <img src="{{ l.image_url }}" alt="" loading="lazy" onerror="this.style.display='none'" />
+    {% else %}
+    <div class="placeholder">🏠</div>
+    {% endif %}
+    <span class="badge badge-{{ l.status.value }}">{{ l.status.value }}</span>
+    <span class="badge source">{{ l.source }}</span>
+  </div>
+  <div class="card-body">
+    <h3 class="card-title">
+      <a href="{{ l.url }}" target="_blank" rel="noopener">{{ l.title or 'Property' }}</a>
+    </h3>
+    <p class="addr">{{ l.address or l.area or 'Bath' }}{% if l.postcode %} · {{ l.postcode }}{% endif %}</p>
+    <div class="price-row">
+      <span class="price">{% if l.price_pcm %}£{{ '{:,}'.format(l.price_pcm) }}<small> pcm</small>{% else %}Price n/a{% endif %}</span>
+      {% if l.price_pppw %}<span class="pppw">£{{ '%.0f'|format(l.price_pppw) }} pp/pw</span>{% endif %}
+    </div>
+    <ul class="facts">
+      {% if l.beds %}<li>{{ l.beds }} bed</li>{% endif %}
+      {% if l.baths %}<li>{{ l.baths }} bath</li>{% endif %}
+      {% if l.property_type %}<li>{{ l.property_type }}</li>{% endif %}
+      {% if l.furnished %}<li>Furnished</li>{% endif %}
+      {% if l.bills_included %}<li>Bills incl.</li>{% endif %}
+      {% if l.available_now %}
+      <li class="tenancy now">Available now</li>
+      {% elif l.tenancy_start %}
+      <li class="tenancy">Tenancy from {{ l.tenancy_start.strftime('%d %b %Y') }}</li>
+      {% elif l.available_from %}
+      <li class="tenancy">From {{ l.available_from }}</li>
+      {% endif %}
+      {% if tinfo %}
+      <li class="transit">🚌 {{ tinfo.route }} at {{ tinfo.stop }} · {{ tinfo.distance_m }} m</li>
+      {% endif %}
+    </ul>
+    {% if l.previous_price_pcm and l.previous_price_pcm != l.price_pcm %}
+    <p class="price-change">↓ was £{{ '{:,}'.format(l.previous_price_pcm) }}</p>
+    {% endif %}
+    <div class="card-actions">
+      <form hx-post="/listings/{{ l.id }}/status" hx-target="#listing-{{ l.id }}" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="status" value="shortlisted" />
+        <button class="btn tiny" type="submit">★ Shortlist</button>
+      </form>
+      <form hx-post="/listings/{{ l.id }}/status" hx-target="#listing-{{ l.id }}" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="status" value="seen" />
+        <button class="btn tiny" type="submit">✓ Seen</button>
+      </form>
+      <form hx-post="/listings/{{ l.id }}/status" hx-target="#listing-{{ l.id }}" hx-swap="outerHTML" class="inline">
+        <input type="hidden" name="status" value="hidden" />
+        <button class="btn tiny ghost" type="submit">✕ Hide</button>
+      </form>
+    </div>
+  </div>
+</article>

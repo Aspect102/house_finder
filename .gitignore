@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# App data
+*.db
+*.sqlite3
+.env
+data/transit/
+
+# Playwright
+.playwright/

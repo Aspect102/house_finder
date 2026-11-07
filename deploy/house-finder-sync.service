@@ -1,0 +1,12 @@
+[Unit]
+Description=House Finder — one-shot sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=housefinder
+Group=housefinder
+WorkingDirectory=/home/housefinder/Documents/house_finder
+EnvironmentFile=-/home/housefinder/Documents/house_finder/.env
+ExecStart=/home/housefinder/Documents/house_finder/.venv/bin/python -m house_finder.cli sync

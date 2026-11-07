@@ -1,0 +1,13 @@
+<div class="stat"><span class="num">{{ counts.get('new', 0) }}</span><span class="lbl">New</span></div>
+<div class="stat"><span class="num">{{ counts.get('seen', 0) }}</span><span class="lbl">Seen</span></div>
+<div class="stat"><span class="num">{{ counts.get('shortlisted', 0) }}</span><span class="lbl">Shortlisted</span></div>
+<div class="stat"><span class="num">{{ counts.get('hidden', 0) }}</span><span class="lbl">Hidden</span></div>
+<div class="stat"><span class="num">{{ active_total or 0 }}</span><span class="lbl">Active</span></div>
+<div class="stat wide">
+  <span class="num">{{ last_run.started_at.strftime('%d %b %H:%M') if last_run else '—' }}</span>
+  <span class="lbl">Last sync{% if last_run %} · {{ last_run.status.value }} · {{ last_run.new }} new{% endif %}</span>
+</div>
+<div class="stat wide">
+  <span class="num">{{ 'on' if scheduler else 'off' }}</span>
+  <span class="lbl">Scheduler · every {{ settings.sync_interval_minutes }}m</span>
+</div>

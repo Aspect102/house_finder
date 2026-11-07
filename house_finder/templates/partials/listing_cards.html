@@ -1,0 +1,14 @@
+{% if not listings %}
+  <div class="empty">
+    <h3>No listings match your filters</h3>
+    <p>Try widening the search, or hit <strong>Sync now</strong> to fetch fresh results.</p>
+  </div>
+{% else %}
+  {% if transit_warning %}<p class="hint warn">{{ transit_warning }}</p>{% endif %}
+  <p class="result-count">{{ listings|length }} listing(s)</p>
+  <div class="cards">
+    {% for l in listings %}
+      {% include "partials/listing_card.html" %}
+    {% endfor %}
+  </div>
+{% endif %}
